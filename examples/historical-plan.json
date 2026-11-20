@@ -1,0 +1,22 @@
+[
+  {
+    "id": "moonback-async-cancellation",
+    "repo": "../downstream-upgrade-study/moonback",
+    "revision": "ccb19d75371e4887d2895d3b3a76a47ed029af61",
+    "module": "moonback",
+    "dependency": "moonbitlang/async",
+    "baseline": "0.21.0",
+    "candidate": "0.22.0",
+    "target": "wasm"
+  },
+  {
+    "id": "moonyacc-async-control",
+    "repo": "../downstream-upgrade-study/moonyacc",
+    "revision": "0adc77306b70a4e651899dc81e1516693bbd91f5",
+    "module": ".",
+    "dependency": "moonbitlang/async",
+    "baseline": "0.20.3",
+    "candidate": "0.22.4",
+    "target": "wasm"
+  }
+]
