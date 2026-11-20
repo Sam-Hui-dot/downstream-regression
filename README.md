@@ -56,7 +56,7 @@ pwsh -NoProfile -File examples/verify-historical.ps1
 
 MoonBack 的新增失败中，4 项报 `TaskCancelled`，2 项超时，涉及连接复用、空闲连接取消和连接断开。维护者在 `c4b5564` 适配了取消语义。同一工具链手工复验修复提交通过 97/97 项测试。再用错误的基线版本调用 CLI，实测退出码为 `2`，输出缺少的精确版本和日志目录。
 
-GitHub Actions 使用官方 Windows 稳定版工具链，记录实际版本并执行 Wasm 和 Native 严格检查、Wasm 构建及上述两个历史用例。
+GitHub Actions 使用带 SHA-256 校验的官方 Windows 历史工具链和标准库，执行 Wasm 和 Native 严格检查、Wasm 构建及上述两个历史用例。案例中的历史依赖需要 `moonc 0.10.20+65efd5b93`，更新到 0.10.22 会在运行测试前遇到旧版依赖的编译错误。
 
 - [MoonBack 上游适配提交](https://github.com/moonbitlang/moonback/commit/c4b5564d947e5c713d12761e67966828c53478a8)
 - [moonyacc 升级记录](https://github.com/moonbitlang/moonyacc/pull/83)

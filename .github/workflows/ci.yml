@@ -18,10 +18,31 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - name: Install the stable MoonBit toolchain
-        uses: moonbit-community/setup-moonbit@04293a8a813bfd4b6c2fce22701b52ae1050d100
-        with:
-          version: stable
+      - name: Install the historical MoonBit toolchain and core
+        run: |
+          $toolchain = Join-Path $env:RUNNER_TEMP 'moonbit-0.10.20'
+          $sdk = Join-Path $env:RUNNER_TEMP 'moonbit-0.10.20.zip'
+          $core = Join-Path $env:RUNNER_TEMP 'core-0.10.20.tar.gz'
+          function Get-VerifiedArchive($Url, $Destination, $Sha256) {
+            curl.exe --fail --location --retry 3 --max-time 120 --output $Destination $Url
+            if ($LASTEXITCODE) { throw "Download failed: $Url" }
+            if ((Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash -ne $Sha256) {
+              throw "Unexpected archive checksum: $Destination"
+            }
+          }
+          Get-VerifiedArchive 'https://cli.moonbitlang.com/binaries/0.10.20%2B65efd5b93/moonbit-windows-x86_64.zip' $sdk 'bdff9a3b2d7c61a3adae2fe09221d3de63effc6cab28bfa0cbeb94fb0d529d79'
+          Get-VerifiedArchive 'https://cli.moonbitlang.com/cores/core-0.10.20%2B65efd5b93.tar.gz' $core '8ec2a2c01335501d703867bb4eef5f92d3cd7e1ae1ee5f7f14d54d16d2c7c2b5'
+          Expand-Archive -LiteralPath $sdk -DestinationPath $toolchain
+          $library = Join-Path $toolchain 'lib'
+          New-Item -ItemType Directory -Force -Path $library | Out-Null
+          tar.exe -xzf $core -C $library
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:MOON_HOME = $toolchain
+          $bin = Join-Path $toolchain 'bin'
+          & (Join-Path $bin 'moon.exe') -C (Join-Path $library 'core') bundle --warn-list -a --all
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "MOON_HOME=$toolchain" >> $env:GITHUB_ENV
+          $bin >> $env:GITHUB_PATH
       - name: Verify toolchain and compile
         run: |
           moon version --all
