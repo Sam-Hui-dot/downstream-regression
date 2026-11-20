@@ -10,26 +10,20 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 25
     env:
-      MOONBIT_INSTALL_VERSION: '0.1.20261104'
       MOON_WORK: 'off'
     defaults:
       run:
         shell: pwsh
     steps:
       - uses: actions/checkout@v5
-      - name: Install the pinned MoonBit toolchain
-        run: |
-          $installerPath = Join-Path $env:RUNNER_TEMP 'install-moonbit.ps1'
-          Invoke-WebRequest -Uri https://cli.moonbitlang.com/install/powershell.ps1 -OutFile $installerPath
-          & $installerPath
-          Join-Path $env:USERPROFILE '.moon\bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+      - name: Install the stable MoonBit toolchain
+        uses: moonbit-community/setup-moonbit@04293a8a813bfd4b6c2fce22701b52ae1050d100
+        with:
+          version: stable
       - name: Verify toolchain and compile
         run: |
-          $version = moon version --all
-          $version
-          if ($LASTEXITCODE -ne 0 -or ($version -join "`n") -notmatch '(?m)^moon 0\.1\.20261104\b') {
-            throw 'Expected the Moon toolchain used by the historical comparisons.'
-          }
+          moon version --all
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           moon update
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           moon check --target wasm --deny-warn
