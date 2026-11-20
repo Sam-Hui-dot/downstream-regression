@@ -1,0 +1,48 @@
+name: Downstream regression checks
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  historical-comparison:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      MOONBIT_INSTALL_VERSION: '0.1.20261104'
+      MOON_WORK: 'off'
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install the pinned MoonBit toolchain
+        run: |
+          $installerPath = Join-Path $env:RUNNER_TEMP 'install-moonbit.ps1'
+          Invoke-WebRequest -Uri https://cli.moonbitlang.com/install/powershell.ps1 -OutFile $installerPath
+          & $installerPath
+          Join-Path $env:USERPROFILE '.moon\bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+      - name: Verify toolchain and compile
+        run: |
+          $version = moon version --all
+          $version
+          if ($LASTEXITCODE -ne 0 -or ($version -join "`n") -notmatch '(?m)^moon 0\.1\.20261104\b') {
+            throw 'Expected the Moon toolchain used by the historical comparisons.'
+          }
+          moon update
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          moon check --target wasm --deny-warn
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          moon check --target native --deny-warn
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          moon build --target wasm
+          exit $LASTEXITCODE
+      - name: Fetch historical downstreams outside the project
+        run: |
+          git clone https://github.com/moonbitlang/moonback.git ../downstream-upgrade-study/moonback
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          git clone https://github.com/moonbitlang/moonyacc.git ../downstream-upgrade-study/moonyacc
+          exit $LASTEXITCODE
+      - name: Check regression and passing control
+        run: ./examples/verify-historical.ps1
