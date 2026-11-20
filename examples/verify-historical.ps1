@@ -14,6 +14,17 @@ try {
     $output = & $moonExecutable run --target wasm cmd/main -- batch $moonExecutable $gitExecutable examples/historical-plan.json
     $code = $LASTEXITCODE
     if ($code -ne 1) {
+        $diagnostics = $output | Select-Object -Last 1 | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+        foreach ($trial in $diagnostics.cases) {
+            Write-Host "Case: $($trial.id)"
+            foreach ($name in 'baseline-test.txt', 'candidate-test.txt') {
+                $log = Join-Path $trial.evidence $name
+                if (Test-Path -LiteralPath $log -PathType Leaf) {
+                    Write-Host "Log: $name"
+                    Get-Content -LiteralPath $log -Tail 30 | ForEach-Object { Write-Host "  $_" }
+                }
+            }
+        }
         throw "Expected one regression in the batch. Exit code $code. Output: $output"
     }
 

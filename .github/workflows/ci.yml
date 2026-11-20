@@ -16,6 +16,8 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Install the stable MoonBit toolchain
         uses: moonbit-community/setup-moonbit@04293a8a813bfd4b6c2fce22701b52ae1050d100
         with:
