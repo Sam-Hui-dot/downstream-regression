@@ -29,7 +29,13 @@ moon run cmd/main --target wasm -- moon moonbitlang/async D:/cases/moonback-old/
 moon run cmd/main --target wasm -- batch moon git examples/historical-plan.json
 ```
 
-示例使用同目录下 `../downstream-upgrade-study` 中已克隆的历史项目。也可以按清单中的提交在其他本地仓库复现，再更新 `repo`。
+示例使用 `../downstream-upgrade-study` 中的历史项目。从本仓库根目录运行下面的命令可准备源码和核对结果。已有这两个克隆目录时，直接运行最后一条命令。
+
+```powershell
+git clone https://github.com/moonbitlang/moonback.git ../downstream-upgrade-study/moonback
+git clone https://github.com/moonbitlang/moonyacc.git ../downstream-upgrade-study/moonyacc
+pwsh -NoProfile -File examples/verify-historical.ps1
+```
 
 ## 报告
 
@@ -41,7 +47,14 @@ moon run cmd/main --target wasm -- batch moon git examples/historical-plan.json
 
 ## 历史案例
 
-首批用例来自已独立运行的历史实验。MoonBack 在仅升 `async` 0.21.0 到 0.22.0 后从 89/89 变为 83/89，维护者适配提交 `c4b5564` 恢复通过。moonyacc 只把 `async` 0.20.3 升到 0.22.4，两轮都是 74/74。记录属于预先完成的手工对照。CLI 的端到端复验单独进行。
+在 Windows 上使用 Moon `0.1.20261104` 和 Wasm 测试目标，批量 CLI 实测如下。脚本核实两边解析出的版本，再断言通过数和新增失败数。
+
+| 下游 | 依赖升级 | 旧版 → 新版 | CLI 状态 |
+| --- | --- | --- | --- |
+| MoonBack `ccb19d7` | `async` 0.21.0 → 0.22.0 | 89/89 → 83/89 | `new_test_failure`，列出 6 项失败 |
+| moonyacc `0adc773` | `async` 0.20.3 → 0.22.4 | 74/74 → 74/74 | `pass` |
+
+MoonBack 的新增失败中，4 项报 `TaskCancelled`，2 项超时，涉及连接复用、空闲连接取消和连接断开。维护者在 `c4b5564` 适配了取消语义。同一工具链手工复验修复提交通过 97/97 项测试。再用错误的基线版本调用 CLI，实测退出码为 `2`，输出缺少的精确版本和日志目录。
 
 - [MoonBack 上游适配提交](https://github.com/moonbitlang/moonback/commit/c4b5564d947e5c713d12761e67966828c53478a8)
 - [moonyacc 升级记录](https://github.com/moonbitlang/moonyacc/pull/83)
