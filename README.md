@@ -39,7 +39,7 @@ pwsh -NoProfile -File examples/verify-historical.ps1
 
 ## 报告
 
-退出码 `0` 表示两轮测试通过且测试统计可比较，`1` 表示出现新的失败或已知失败的消息变化，`2` 表示既有失败、诊断无法完整解析或工具执行出错。编译中止和缺少测试统计会保留原始日志，并标记为无法判定。当前以 `moon test` 的英文输出为输入。
+退出码 `0` 表示两轮测试通过且测试统计可比较，`1` 表示新增测试失败、已知失败的消息变化，或基线通过后候选版出现 MoonBit 编译诊断，`2` 表示既有失败、诊断无法完整解析或工具执行出错。`candidate_compile_failure` 附带编译错误编号，完整诊断可在 `candidate-test.txt` 中查看。依赖下载、预构建命令等其他原因引起的中止保留原始日志，标记为无法判定。当前以 `moon test` 的英文输出为输入。
 
 报告包含 `other_dependency_changes`，列出目标依赖之外的解析变化。两个 `*-tree.txt` 文件保留原始层级。`toolchain.txt` 记录工具链版本。版本检查、依赖解析和单轮测试的时限分别为 30 秒、60 秒和 10 分钟。超时和超过 16 MiB 的日志会作为工具错误报告，原始日志留在证据目录。
 
@@ -57,6 +57,8 @@ pwsh -NoProfile -File examples/verify-historical.ps1
 MoonBack 的新增失败中，4 项报 `TaskCancelled`，2 项超时，涉及连接复用、空闲连接取消和连接断开。维护者在 `c4b5564` 适配了取消语义。同一工具链手工复验修复提交通过 97/97 项测试。再用错误的基线版本调用 CLI，实测退出码为 `2`，输出缺少的精确版本和日志目录。
 
 GitHub Actions 使用带 SHA-256 校验的官方 Windows 历史工具链和标准库，执行 Wasm 和 Native 严格检查、Wasm 构建及上述两个历史用例。案例中的历史依赖需要 `moonc 0.10.20+65efd5b93`，更新到 0.10.22 会在运行测试前遇到旧版依赖的编译错误。
+
+仓库内的 `examples/compile-regression` 另测编译回归分支。同一份源码调用 `handle_cancellation`，依赖 `async` 0.22.0 时通过，降到尚未提供该接口的 0.21.0 时产生 `Error: [4021]`。
 
 - [MoonBack 上游适配提交](https://github.com/moonbitlang/moonback/commit/c4b5564d947e5c713d12761e67966828c53478a8)
 - [moonyacc 升级记录](https://github.com/moonbitlang/moonyacc/pull/83)

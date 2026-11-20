@@ -70,3 +70,19 @@ jobs:
           $env:TMP = $env:RUNNER_TEMP
           ./examples/verify-historical.ps1
           exit 0
+      - name: Detect a candidate-only compiler failure
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          $env:TEMP = $env:RUNNER_TEMP
+          $env:TMP = $env:RUNNER_TEMP
+          $moon = (Get-Command moon -CommandType Application | Select-Object -First 1).Source
+          $git = (Get-Command git -CommandType Application | Select-Object -First 1).Source
+          $output = & $moon run --target wasm cmd/main -- snapshot $moon $git $PWD.Path HEAD examples/compile-regression moonbitlang/async 0.22.0 0.21.0 wasm
+          $code = $LASTEXITCODE
+          $report = $output | Select-Object -Last 1 | ConvertFrom-Json
+          if ($code -ne 1 -or $report.status -ne 'candidate_compile_failure' -or
+              $report.baseline.counts.passed -ne 1 -or $report.candidate.compiler_errors -notcontains 'Error: [4021]') {
+            throw "Expected an undefined API diagnostic on the candidate only. Exit code $code. Output: $output"
+          }
+          Write-Output 'Compiler regression detected: handle_cancellation is missing in async 0.21.0.'
+          exit 0

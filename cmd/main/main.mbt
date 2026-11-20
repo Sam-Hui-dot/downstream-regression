@@ -28,6 +28,7 @@ struct Trial {
   exit_code : Int
   counts : TestCounts?
   failures : Map[String, String]
+  compiler_errors : Array[String]
   resolutions : Map[String, Array[String]]
 }
 
@@ -103,6 +104,19 @@ fn comparable(trial : Trial) -> Bool {
 }
 
 ///|
+fn compiler_errors(log : String) -> Array[String] {
+  let errors : Array[String] = []
+  for raw in log.split("\n") {
+    let line = raw.trim()
+    guard line.has_prefix("Error: [") else { continue }
+    guard line[8:].split_once("]") is Some((code, _)) else { continue }
+    guard code.length() == 4 && code.to_owned().iter().all(ch => ch >= '0' && ch <= '9') else { continue }
+    errors.push(line.to_owned())
+  }
+  errors
+}
+
+///|
 fn resolved_direct_versions(tree : String, dependency : String) -> Array[String] {
   let prefix = "\{dependency} -> "
   let versions = []
@@ -157,6 +171,7 @@ async fn execute(
     exit_code,
     counts: test_counts(log),
     failures: failure_records(log),
+    compiler_errors: compiler_errors(log),
     resolutions: inventory(tree),
   }
 }
@@ -180,20 +195,25 @@ fn compare(baseline : Trial, candidate : Trial, dependency : String, target : St
   let new_failures : Map[String, String] = Map([])
   let fixed_failures : Map[String, String] = Map([])
   let changed_failure_messages : Map[String, String] = Map([])
-  for name, message in candidate.failures {
-    match baseline.failures.get(name) {
-      None => new_failures[name] = message
-      Some(previous) => if previous != message { changed_failure_messages[name] = message }
+  let baseline_comparable = comparable(baseline)
+  let candidate_comparable = comparable(candidate)
+  if baseline_comparable && candidate_comparable {
+    for name, message in candidate.failures {
+      match baseline.failures.get(name) {
+        None => new_failures[name] = message
+        Some(previous) => if previous != message { changed_failure_messages[name] = message }
+      }
     }
-  }
-  for name, message in baseline.failures {
-    if !candidate.failures.contains(name) {
-      fixed_failures[name] = message
+    for name, message in baseline.failures {
+      if !candidate.failures.contains(name) {
+        fixed_failures[name] = message
+      }
     }
   }
   let status = match (baseline.counts, candidate.counts) {
-    _ if !comparable(baseline) => "baseline_inconclusive"
-    _ if !comparable(candidate) => "candidate_inconclusive"
+    _ if !baseline_comparable => "baseline_inconclusive"
+    (Some(before), None) if baseline.exit_code == 0 && before.skipped == 0 && candidate.exit_code != 0 && !candidate.compiler_errors.is_empty() => "candidate_compile_failure"
+    _ if !candidate_comparable => "candidate_inconclusive"
     _ if !new_failures.is_empty() => "new_test_failure"
     _ if !changed_failure_messages.is_empty() => "failure_changed"
     _ if candidate.exit_code != 0 => "candidate_failing"
@@ -253,7 +273,7 @@ async fn run_comparison(
     if print_report { println(json) }
     match report.status {
       "pass" => 0
-      "new_test_failure" | "failure_changed" => 1
+      "new_test_failure" | "failure_changed" | "candidate_compile_failure" => 1
       _ => 2
     }
   } catch {
