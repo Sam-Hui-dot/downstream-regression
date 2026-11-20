@@ -39,7 +39,10 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $env:MOON_HOME = $toolchain
           $bin = Join-Path $toolchain 'bin'
-          & (Join-Path $bin 'moon.exe') -C (Join-Path $library 'core') bundle --warn-list -a --all
+          $moon = Join-Path $bin 'moon.exe'
+          # The official installer creates this launcher. The archive only contains moon.exe.
+          New-Item -ItemType HardLink -Path (Join-Path $bin 'moonx.exe') -Target $moon | Out-Null
+          & $moon -C (Join-Path $library 'core') bundle --warn-list -a --all
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           "MOON_HOME=$toolchain" >> $env:GITHUB_ENV
           $bin >> $env:GITHUB_PATH
