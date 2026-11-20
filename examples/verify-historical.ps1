@@ -17,11 +17,17 @@ try {
         $diagnostics = $output | Select-Object -Last 1 | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
         foreach ($trial in $diagnostics.cases) {
             Write-Host "Case: $($trial.id)"
+            $reportPath = Join-Path $trial.evidence 'report.json'
+            if (Test-Path -LiteralPath $reportPath -PathType Leaf) {
+                Get-Content -Raw -LiteralPath $reportPath | Write-Host
+            }
             foreach ($name in 'baseline-test.txt', 'candidate-test.txt') {
                 $log = Join-Path $trial.evidence $name
                 if (Test-Path -LiteralPath $log -PathType Leaf) {
                     Write-Host "Log: $name"
-                    Get-Content -LiteralPath $log -Tail 30 | ForEach-Object { Write-Host "  $_" }
+                    $lines = Get-Content -LiteralPath $log
+                    $lines | Select-String -Pattern 'Error|error|failed|panic|Total tests' | Select-Object -Last 24 | ForEach-Object { Write-Host "  $($_.Line)" }
+                    $lines | Select-Object -Last 8 | ForEach-Object { Write-Host "  $_" }
                 }
             }
         }

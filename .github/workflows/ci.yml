@@ -62,4 +62,8 @@ jobs:
           git clone https://github.com/moonbitlang/moonyacc.git ../downstream-upgrade-study/moonyacc
           exit $LASTEXITCODE
       - name: Check regression and passing control
-        run: ./examples/verify-historical.ps1
+        run: |
+          $env:TEMP = $env:RUNNER_TEMP
+          $env:TMP = $env:RUNNER_TEMP
+          ./examples/verify-historical.ps1
+          exit 0
