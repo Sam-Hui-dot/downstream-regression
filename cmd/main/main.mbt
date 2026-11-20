@@ -5,6 +5,14 @@ suberror StudyError {
 }
 
 ///|
+fn error_message(error : Error) -> String {
+  match error {
+    InvalidInput(message) | ToolFailed(message) => message
+    other => other.to_string()
+  }
+}
+
+///|
 struct Variant {
   dir : String
   version : String
@@ -249,7 +257,7 @@ async fn run_comparison(
       _ => 2
     }
   } catch {
-    error => raise ToolFailed("\{error}; logs: \{evidence}")
+    error => raise ToolFailed("\{error_message(error)}; logs: \{evidence}")
   }
 }
 
@@ -351,8 +359,7 @@ async fn main {
     return
   }
   let exit_code = try run(args[1:].to_owned()) catch {
-    InvalidInput(message) | ToolFailed(message) => { println(message); 2 }
-    error => { println(error.to_string()); 2 }
+    error => { println(error_message(error)); 2 }
   }
   @env.exit(exit_code)
 }

@@ -74,7 +74,7 @@ async fn batch(args : Array[String]) -> Int {
       let code = snapshot(job.arguments, case_dir, false)
       { id: job.id, exit_code: code, evidence: case_dir, error: None }
     } catch {
-      error => { id: job.id, exit_code: 2, evidence: case_dir, error: Some(error.to_string()) }
+      error => { id: job.id, exit_code: 2, evidence: case_dir, error: Some(error_message(error)) }
     }
     outcomes.push(outcome)
     if outcome.exit_code > exit_code { exit_code = outcome.exit_code }
