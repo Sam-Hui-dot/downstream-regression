@@ -10,10 +10,11 @@
    - `manifest_test.mbt`: exact single-occurrence rewriting for both `moon.mod` (`"dep@ver"`) and `moon.mod.json` (`"dep": "ver"`), prefix collision protection, and rejection of missing/duplicate/invalid manifests.
    - `compare_test.mbt`: all 9 `Comparison.status` classifications and CLI exit-code mappings, `--out` option parsing and rejection, plus batch JSON plan validation (duplicate IDs, invalid targets, path traversal rejection).
    - `report_test.mbt`: deterministic Markdown snapshot tests (`inspect`) for both single-case reports (`report.md`) and batch summaries (`batch.md`).
+   - `mbti_test.mbt`: native `.mbti` public API interface parsing and breaking-change detection (`values`, `Type::method` separation, `types`, visibility narrowing, `impls`, `typealias`, text/Markdown rendering) plus offline HTML report generation (`render_html_report` and `render_batch_html`).
 
 2. **Independent consumer check**
-   - CI creates a separate temporary MoonBit module importing `Sam-Hui-dot/downstream-regression` and runs `moon test` on `js` and `wasm` targets against the public root library API.
-   - Release verification additionally installs `Sam-Hui-dot/downstream-regression/cmd/main@0.2.0` via `moon install` into a standalone directory and runs both `--help` and `snapshot` against `examples/compile-regression`.
+   - CI creates a separate temporary MoonBit module importing `Sam-Hui-dot/downstream-regression@0.3.0` and runs it on `js` and `wasm` targets against the public root library API (`parse_test_counts`, `rewrite_manifest_dependency`, `diff_mbti`).
+   - Release verification additionally verifies `Sam-Hui-dot/downstream-regression@0.3.0` from Mooncakes in a standalone module on `js` and `wasm`.
 
 3. **Real historical ecosystem comparisons**
    - Executed in CI with SHA-256 verified Windows toolchain archives (`moon 0.1.20261104`, `moonc 0.10.20+65efd5b93`, `MOON_WORK=off`):
