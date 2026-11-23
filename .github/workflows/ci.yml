@@ -46,17 +46,70 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           "MOON_HOME=$toolchain" >> $env:GITHUB_ENV
           $bin >> $env:GITHUB_PATH
-      - name: Verify toolchain and compile
+      - name: Verify formatting, multi-target checks, unit tests, and build
         run: |
           moon version --all
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           moon update
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          moon check --target wasm --deny-warn
+          moon fmt --check
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          moon check --target native --deny-warn
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          foreach ($target in 'wasm', 'wasm-gc', 'js', 'native') {
+            Write-Output "Checking and testing target: $target"
+            moon check --target $target --deny-warn
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            moon test --target $target --deny-warn
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
           moon build --target wasm
+          exit $LASTEXITCODE
+      - name: Verify root library from an independent consumer module
+        run: |
+          $ws = Join-Path $env:RUNNER_TEMP 'independent-consumer-ws'
+          $lib = Join-Path $ws 'library'
+          $consumer = Join-Path $ws 'consumer'
+          New-Item -ItemType Directory -Force -Path $lib, $consumer | Out-Null
+          foreach ($f in 'moon.mod', 'moon.pkg', 'types.mbt', 'parser.mbt', 'manifest.mbt', 'compare.mbt', 'report.mbt') {
+            Copy-Item -LiteralPath $f -Destination (Join-Path $lib $f)
+          }
+          Set-Content -LiteralPath (Join-Path $ws 'moon.work') -Value 'members = ["library", "consumer"]'
+          Set-Content -LiteralPath (Join-Path $consumer 'moon.mod') -Value @"
+          name = "consumer/check"
+          version = "0.1.0"
+
+          import {
+            "Sam-Hui-dot/downstream-regression@0.2.0",
+          }
+          "@
+          Set-Content -LiteralPath (Join-Path $consumer 'moon.pkg') -Value @"
+          import {
+            "Sam-Hui-dot/downstream-regression" @dr,
+          }
+          pkgtype(kind: "executable")
+          "@
+          Set-Content -LiteralPath (Join-Path $consumer 'main.mbt') -Value @'
+          fn main raise {
+            let counts = @dr.parse_test_counts("Total tests: 4, passed: 4, failed: 0.")
+            guard counts == Some({ total: 4, passed: 4, failed: 0, skipped: 0 }) else {
+              abort("unexpected counts")
+            }
+            let rewritten = @dr.rewrite_manifest_dependency(
+              MoonModJson,
+              "{\"name\":\"app\",\"deps\":{\"a/b\":\"0.1.0\"}}",
+              "a/b",
+              "0.1.0",
+              "0.2.0",
+            )
+            guard rewritten.contains("\"a/b\":\"0.2.0\"") else {
+              abort("unexpected rewrite")
+            }
+            println("consumer: ok")
+          }
+          '@
+          $env:MOON_WORK = ''
+          moon -C $consumer run --target js --deny-warn .
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          moon -C $consumer run --target wasm --deny-warn .
           exit $LASTEXITCODE
       - name: Fetch historical downstreams outside the project
         run: |
@@ -68,7 +121,12 @@ jobs:
         run: |
           $env:TEMP = $env:RUNNER_TEMP
           $env:TMP = $env:RUNNER_TEMP
-          ./examples/verify-historical.ps1
+          $batchOut = Join-Path $env:RUNNER_TEMP 'historical-batch-evidence'
+          ./examples/verify-historical.ps1 -OutDir $batchOut
+          $summaryMd = Join-Path $batchOut 'batch.md'
+          if (Test-Path -LiteralPath $summaryMd -PathType Leaf) {
+            Get-Content -Raw -LiteralPath $summaryMd >> $env:GITHUB_STEP_SUMMARY
+          }
           exit 0
       - name: Detect a candidate-only compiler failure
         run: |
@@ -77,12 +135,19 @@ jobs:
           $env:TMP = $env:RUNNER_TEMP
           $moon = (Get-Command moon -CommandType Application | Select-Object -First 1).Source
           $git = (Get-Command git -CommandType Application | Select-Object -First 1).Source
-          $output = & $moon run --target wasm cmd/main -- snapshot $moon $git $PWD.Path HEAD examples/compile-regression moonbitlang/async 0.22.0 0.21.0 wasm
+          $compileOut = Join-Path $env:RUNNER_TEMP 'compile-regression-evidence'
+          $output = & $moon run --target wasm cmd/main -- --out $compileOut snapshot $moon $git $PWD.Path HEAD examples/compile-regression moonbitlang/async 0.22.0 0.21.0 wasm
           $code = $LASTEXITCODE
           $report = $output | Select-Object -Last 1 | ConvertFrom-Json
           if ($code -ne 1 -or $report.status -ne 'candidate_compile_failure' -or
               $report.baseline.counts.passed -ne 1 -or $report.candidate.compiler_errors -notcontains 'Error: [4021]') {
             throw "Expected an undefined API diagnostic on the candidate only. Exit code $code. Output: $output"
           }
+          $reportMd = Join-Path $compileOut 'report.md'
+          if (-not (Test-Path -LiteralPath $reportMd -PathType Leaf)) {
+            throw "Expected Markdown report was not written: $reportMd"
+          }
+          "`n---`n" >> $env:GITHUB_STEP_SUMMARY
+          Get-Content -Raw -LiteralPath $reportMd >> $env:GITHUB_STEP_SUMMARY
           Write-Output 'Compiler regression detected: handle_cancellation is missing in async 0.21.0.'
           exit 0
