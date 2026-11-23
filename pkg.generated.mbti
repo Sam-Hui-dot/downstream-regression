@@ -9,6 +9,8 @@ import {
 // Values
 pub fn compare_trials(Trial, Trial, String, String, String) -> Comparison
 
+pub fn diff_mbti(String, String) -> MbtiDiffReport
+
 pub fn diff_resolutions(Map[String, Array[String]], Map[String, Array[String]], String) -> Array[ResolutionChange]
 
 pub fn error_message(Error) -> String
@@ -29,13 +31,23 @@ pub fn parse_direct_versions(String, String) -> Array[String]
 
 pub fn parse_failure_records(String) -> Map[String, String]
 
+pub fn parse_mbti(String) -> MbtiInterface
+
 pub fn parse_test_counts(String) -> TestCounts?
 
 pub fn parse_tree_root(String) -> String
 
+pub fn render_batch_html(BatchOutcome) -> String
+
 pub fn render_batch_markdown(BatchOutcome) -> String
 
+pub fn render_html_report(Comparison, toolchain? : String) -> String
+
 pub fn render_markdown_report(Comparison, toolchain? : String) -> String
+
+pub fn render_mbti_diff_markdown(MbtiDiffReport) -> String
+
+pub fn render_mbti_diff_text(MbtiDiffReport) -> String
 
 pub fn rewrite_manifest_dependency(ManifestKind, String, String, String, String) -> String raise StudyError
 
@@ -125,6 +137,60 @@ pub(all) enum ManifestKind {
 pub fn ManifestKind::equal(Self, Self) -> Bool
 pub fn ManifestKind::not_equal(Self, Self) -> Bool
 pub fn ManifestKind::to_repr(Self) -> @debug.Repr
+
+#derive(Eq, @debug.Debug, @json.ToJson)
+pub(all) struct MbtiChange {
+  severity : String
+  category : String
+  symbol : String
+  detail : String
+  baseline : String?
+  candidate : String?
+}
+pub fn MbtiChange::equal(Self, Self) -> Bool
+pub fn MbtiChange::not_equal(Self, Self) -> Bool
+pub fn MbtiChange::to_json(Self) -> @json.Json
+pub fn MbtiChange::to_repr(Self) -> @debug.Repr
+
+#derive(Eq, @debug.Debug, @json.ToJson)
+pub(all) struct MbtiDiffReport {
+  package_name : String
+  compatible : Bool
+  breaking_count : Int32
+  additive_count : Int32
+  changes : Array[MbtiChange]
+}
+pub fn MbtiDiffReport::equal(Self, Self) -> Bool
+pub fn MbtiDiffReport::not_equal(Self, Self) -> Bool
+pub fn MbtiDiffReport::to_json(Self) -> @json.Json
+pub fn MbtiDiffReport::to_repr(Self) -> @debug.Repr
+
+#derive(Eq, @debug.Debug, @json.ToJson)
+pub(all) struct MbtiInterface {
+  package_name : String
+  values : Map[String, String]
+  types : Map[String, MbtiTypeDecl]
+  methods : Map[String, String]
+  impls : Array[String]
+  type_aliases : Map[String, String]
+}
+pub fn MbtiInterface::equal(Self, Self) -> Bool
+pub fn MbtiInterface::not_equal(Self, Self) -> Bool
+pub fn MbtiInterface::to_json(Self) -> @json.Json
+pub fn MbtiInterface::to_repr(Self) -> @debug.Repr
+
+#derive(Eq, @debug.Debug, @json.ToJson)
+pub(all) struct MbtiTypeDecl {
+  name : String
+  kind : String
+  visibility : String
+  header : String
+  members : Array[String]
+}
+pub fn MbtiTypeDecl::equal(Self, Self) -> Bool
+pub fn MbtiTypeDecl::not_equal(Self, Self) -> Bool
+pub fn MbtiTypeDecl::to_json(Self) -> @json.Json
+pub fn MbtiTypeDecl::to_repr(Self) -> @debug.Repr
 
 #derive(Eq, @debug.Debug, @json.ToJson)
 pub(all) struct ResolutionChange {
