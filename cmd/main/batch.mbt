@@ -68,6 +68,11 @@ async fn batch(args : Array[String], out_dir : String?) -> Int32 {
     @downstream-regression.render_batch_markdown(report),
     create_mode=CreateOrTruncate,
   )
+  @fs.write_file(
+    "\{evidence}/batch.html",
+    @downstream-regression.render_batch_html(report),
+    create_mode=CreateOrTruncate,
+  )
   println(json)
   exit_code
 }

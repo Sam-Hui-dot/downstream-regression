@@ -51,11 +51,14 @@ try {
     }
 
     $batchMd = Join-Path $batch.evidence 'batch.md'
+    $batchHtml = Join-Path $batch.evidence 'batch.html'
     $moonbackMd = Join-Path $changed.evidence 'report.md'
+    $moonbackHtml = Join-Path $changed.evidence 'report.html'
     $moonyaccMd = Join-Path $control.evidence 'report.md'
-    foreach ($mdPath in $batchMd, $moonbackMd, $moonyaccMd) {
+    $moonyaccHtml = Join-Path $control.evidence 'report.html'
+    foreach ($mdPath in $batchMd, $batchHtml, $moonbackMd, $moonbackHtml, $moonyaccMd, $moonyaccHtml) {
         if (-not (Test-Path -LiteralPath $mdPath -PathType Leaf)) {
-            throw "Expected Markdown report was not written: $mdPath"
+            throw "Expected report artifact was not written: $mdPath"
         }
     }
 

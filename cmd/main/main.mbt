@@ -10,6 +10,7 @@ let usage : String =
   #|downstream-regression [--out DIR] MOON DEPENDENCY BASE_DIR BASE_VERSION CANDIDATE_DIR CANDIDATE_VERSION [TARGET]
   #|downstream-regression [--out DIR] snapshot MOON GIT REPO REV MODULE_DIR DEPENDENCY BASE_VERSION CANDIDATE_VERSION [TARGET]
   #|downstream-regression [--out DIR] batch MOON GIT PLAN_JSON
+  #|downstream-regression mbti-diff OLD_MBTI NEW_MBTI [--format text|json|md] [--fail-on-breaking] [--out FILE]
   #|TARGET defaults to wasm and can also be native, wasm-gc or js.
 
 ///|
@@ -103,6 +104,11 @@ async fn run_comparison(
     @fs.write_file(
       "\{evidence}/report.md",
       @downstream-regression.render_markdown_report(report, toolchain~),
+      create_mode=CreateOrTruncate,
+    )
+    @fs.write_file(
+      "\{evidence}/report.html",
+      @downstream-regression.render_html_report(report, toolchain~),
       create_mode=CreateOrTruncate,
     )
     if print_report {
@@ -277,9 +283,65 @@ async fn snapshot(
 }
 
 ///|
+async fn cmd_mbti_diff(args : Array[String], out_file : String?) -> Int32 {
+  guard args.length() >= 3 else {
+    raise @downstream-regression.StudyError::InvalidInput(usage)
+  }
+  let old_path = args[1]
+  let new_path = args[2]
+  let mut format = "text"
+  let mut fail_on_breaking = false
+  let mut i = 3
+  while i < args.length() {
+    match args[i] {
+      "--format" => {
+        guard i + 1 < args.length() else {
+          raise @downstream-regression.StudyError::InvalidInput(
+            "--format requires a value",
+          )
+        }
+        format = args[i + 1]
+        i += 2
+      }
+      "--fail-on-breaking" => {
+        fail_on_breaking = true
+        i += 1
+      }
+      other =>
+        raise @downstream-regression.StudyError::InvalidInput(
+          "unknown option: \{other}",
+        )
+    }
+  }
+  let old_text = @fs.read_file(old_path).text()
+  let new_text = @fs.read_file(new_path).text()
+  let report = @downstream-regression.diff_mbti(old_text, new_text)
+  let rendered = match format {
+    "text" => @downstream-regression.render_mbti_diff_text(report)
+    "json" => @json.ToJson::to_json(report).stringify()
+    "md" | "markdown" =>
+      @downstream-regression.render_mbti_diff_markdown(report)
+    _ =>
+      raise @downstream-regression.StudyError::InvalidInput(
+        "unsupported --format value: \{format}",
+      )
+  }
+  match out_file {
+    Some(path) => @fs.write_file(path, rendered, create_mode=CreateOrTruncate)
+    None => println(rendered)
+  }
+  if fail_on_breaking && !report.compatible {
+    1
+  } else {
+    0
+  }
+}
+
+///|
 async fn run(raw_args : Array[String]) -> Int32 {
   let (out_dir, args) = @downstream-regression.extract_out_option(raw_args)
   match args.get(0) {
+    Some("mbti-diff") => return cmd_mbti_diff(args, out_dir)
     Some("snapshot") => {
       let evidence = prepare_evidence_dir(out_dir, "moon-downstream-")
       let (code, _) = snapshot(args, evidence, true)
