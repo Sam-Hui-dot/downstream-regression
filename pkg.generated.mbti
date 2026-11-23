@@ -1,0 +1,170 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "Sam-Hui-dot/downstream-regression"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub fn compare_trials(Trial, Trial, String, String, String) -> Comparison
+
+pub fn diff_resolutions(Map[String, Array[String]], Map[String, Array[String]], String) -> Array[ResolutionChange]
+
+pub fn error_message(Error) -> String
+
+pub fn exit_code_for_status(String) -> Int32
+
+pub fn extract_out_option(Array[String]) -> (String?, Array[String]) raise StudyError
+
+pub fn is_comparable(Trial) -> Bool
+
+pub fn parse_batch_plan(@json.Json) -> Array[BatchCase] raise StudyError
+
+pub fn parse_compiler_errors(String) -> Array[String]
+
+pub fn parse_dependency_inventory(String) -> Map[String, Array[String]]
+
+pub fn parse_direct_versions(String, String) -> Array[String]
+
+pub fn parse_failure_records(String) -> Map[String, String]
+
+pub fn parse_test_counts(String) -> TestCounts?
+
+pub fn parse_tree_root(String) -> String
+
+pub fn render_batch_markdown(BatchOutcome) -> String
+
+pub fn render_markdown_report(Comparison, toolchain? : String) -> String
+
+pub fn rewrite_manifest_dependency(ManifestKind, String, String, String, String) -> String raise StudyError
+
+pub fn strip_ansi(String) -> String
+
+pub fn tool_failed(String) -> StudyError
+
+pub fn validate_module_dir(String) -> Unit raise StudyError
+
+pub fn validate_target(String) -> String raise StudyError
+
+// Errors
+#derive(Eq, @debug.Debug)
+pub(all) suberror StudyError {
+  InvalidInput(String)
+  ToolFailed(String)
+}
+pub fn StudyError::equal(Self, Self) -> Bool
+pub fn StudyError::not_equal(Self, Self) -> Bool
+pub fn StudyError::to_repr(Self) -> @debug.Repr
+
+// Types and methods
+#derive(Eq, @debug.Debug)
+pub(all) struct BatchCase {
+  id : String
+  repo : String
+  revision : String
+  module_dir : String
+  dependency : String
+  baseline : String
+  candidate : String
+  target : String
+}
+pub fn BatchCase::equal(Self, Self) -> Bool
+pub fn BatchCase::not_equal(Self, Self) -> Bool
+pub fn BatchCase::to_repr(Self) -> @debug.Repr
+
+#derive(Eq, @debug.Debug, @json.ToJson)
+pub(all) struct BatchOutcome {
+  evidence : String
+  cases : Array[CaseOutcome]
+}
+pub fn BatchOutcome::equal(Self, Self) -> Bool
+pub fn BatchOutcome::not_equal(Self, Self) -> Bool
+pub fn BatchOutcome::to_json(Self) -> @json.Json
+pub fn BatchOutcome::to_repr(Self) -> @debug.Repr
+
+#derive(Eq, @debug.Debug, @json.ToJson)
+pub(all) struct CaseOutcome {
+  id : String
+  status : String?
+  exit_code : Int32
+  baseline_counts : TestCounts?
+  candidate_counts : TestCounts?
+  new_failure_count : Int32
+  compiler_error_count : Int32
+  evidence : String
+  error : String?
+}
+pub fn CaseOutcome::equal(Self, Self) -> Bool
+pub fn CaseOutcome::not_equal(Self, Self) -> Bool
+pub fn CaseOutcome::to_json(Self) -> @json.Json
+pub fn CaseOutcome::to_repr(Self) -> @debug.Repr
+
+#derive(Eq, @debug.Debug, @json.ToJson)
+pub(all) struct Comparison {
+  status : String
+  baseline : Trial
+  candidate : Trial
+  new_failures : Map[String, String]
+  fixed_failures : Map[String, String]
+  changed_failure_messages : Map[String, String]
+  other_dependency_changes : Array[ResolutionChange]
+  target : String
+  evidence : String
+}
+pub fn Comparison::equal(Self, Self) -> Bool
+pub fn Comparison::not_equal(Self, Self) -> Bool
+pub fn Comparison::to_json(Self) -> @json.Json
+pub fn Comparison::to_repr(Self) -> @debug.Repr
+
+#derive(Eq, @debug.Debug)
+pub(all) enum ManifestKind {
+  MoonMod
+  MoonModJson
+}
+pub fn ManifestKind::equal(Self, Self) -> Bool
+pub fn ManifestKind::not_equal(Self, Self) -> Bool
+pub fn ManifestKind::to_repr(Self) -> @debug.Repr
+
+#derive(Eq, @debug.Debug, @json.ToJson)
+pub(all) struct ResolutionChange {
+  requested : String
+  baseline : Array[String]
+  candidate : Array[String]
+}
+pub fn ResolutionChange::equal(Self, Self) -> Bool
+pub fn ResolutionChange::not_equal(Self, Self) -> Bool
+pub fn ResolutionChange::to_json(Self) -> @json.Json
+pub fn ResolutionChange::to_repr(Self) -> @debug.Repr
+
+#derive(Eq, @debug.Debug, @json.ToJson)
+pub(all) struct TestCounts {
+  total : Int32
+  passed : Int32
+  failed : Int32
+  skipped : Int32
+}
+pub fn TestCounts::equal(Self, Self) -> Bool
+pub fn TestCounts::not_equal(Self, Self) -> Bool
+pub fn TestCounts::to_json(Self) -> @json.Json
+pub fn TestCounts::to_repr(Self) -> @debug.Repr
+
+#derive(Eq, @debug.Debug, @json.ToJson)
+pub(all) struct Trial {
+  directory : String
+  downstream : String
+  dependency : String
+  exit_code : Int32
+  counts : TestCounts?
+  failures : Map[String, String]
+  compiler_errors : Array[String]
+  resolutions : Map[String, Array[String]]
+}
+pub fn Trial::equal(Self, Self) -> Bool
+pub fn Trial::not_equal(Self, Self) -> Bool
+pub fn Trial::to_json(Self) -> @json.Json
+pub fn Trial::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits
