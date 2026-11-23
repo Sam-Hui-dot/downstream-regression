@@ -1,36 +1,11 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "Sam-Hui-dot/downstream-regression/cmd/main"
 
-import {
-  "moonbitlang/core/json",
-}
-
 // Values
 
 // Errors
-type StudyError
 
 // Types and methods
-type BatchCase
-
-#derive(@json.ToJson)
-type BatchOutcome
-
-#derive(@json.ToJson)
-type CaseOutcome
-
-#derive(@json.ToJson)
-type Comparison
-
-#derive(@json.ToJson)
-type ResolutionChange
-
-#derive(@json.ToJson)
-type TestCounts
-
-#derive(@json.ToJson)
-type Trial
-
 type Variant
 
 // Type aliases

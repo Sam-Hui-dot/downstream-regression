@@ -1,6 +1,7 @@
 param(
     [string]$Moon = 'moon',
-    [string]$Git = 'git'
+    [string]$Git = 'git',
+    [string]$OutDir = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -11,7 +12,12 @@ $gitExecutable = (Get-Command $Git -CommandType Application | Select-Object -Fir
 
 Push-Location -LiteralPath $projectDir
 try {
-    $output = & $moonExecutable run --target wasm cmd/main -- batch $moonExecutable $gitExecutable examples/historical-plan.json
+    $cliArgs = @('run', '--target', 'wasm', 'cmd/main', '--')
+    if ($OutDir) {
+        $cliArgs += @('--out', $OutDir)
+    }
+    $cliArgs += @('batch', $moonExecutable, $gitExecutable, 'examples/historical-plan.json')
+    $output = & $moonExecutable @cliArgs
     $code = $LASTEXITCODE
     if ($code -ne 1) {
         $diagnostics = $output | Select-Object -Last 1 | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
@@ -39,6 +45,18 @@ try {
     $control = $batch.cases | Where-Object id -eq 'moonyacc-async-control'
     if ($batch.cases.Count -ne 2 -or $changed.exit_code -ne 1 -or $control.exit_code -ne 0) {
         throw "Unexpected batch status. Evidence: $($batch.evidence)"
+    }
+    if ($changed.status -ne 'new_test_failure' -or $changed.new_failure_count -ne 6 -or $control.status -ne 'pass') {
+        throw "Unexpected batch summary metadata. Evidence: $($batch.evidence)"
+    }
+
+    $batchMd = Join-Path $batch.evidence 'batch.md'
+    $moonbackMd = Join-Path $changed.evidence 'report.md'
+    $moonyaccMd = Join-Path $control.evidence 'report.md'
+    foreach ($mdPath in $batchMd, $moonbackMd, $moonyaccMd) {
+        if (-not (Test-Path -LiteralPath $mdPath -PathType Leaf)) {
+            throw "Expected Markdown report was not written: $mdPath"
+        }
     }
 
     $moonbackReport = Get-Content -Raw -LiteralPath (Join-Path $changed.evidence 'report.json') | ConvertFrom-Json -AsHashtable
