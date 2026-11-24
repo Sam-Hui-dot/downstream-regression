@@ -1,0 +1,91 @@
+name: "MoonBit Downstream Regression & MBTI Guard"
+description: "Run downstream dependency upgrade regression checks or static .mbti breaking-change gates for MoonBit modules"
+inputs:
+  mode:
+    description: "Execution mode: 'mbti-diff' or 'snapshot'"
+    required: false
+    default: "mbti-diff"
+  old_mbti:
+    description: "Baseline .mbti path (for mode=mbti-diff)"
+    required: false
+    default: ""
+  new_mbti:
+    description: "Candidate .mbti path (for mode=mbti-diff)"
+    required: false
+    default: ""
+  fail_on_breaking:
+    description: "Fail the step when breaking .mbti changes are detected ('true' or 'false')"
+    required: false
+    default: "true"
+  repo:
+    description: "Local downstream Git repository path (for mode=snapshot)"
+    required: false
+    default: "."
+  rev:
+    description: "Git revision to test (for mode=snapshot)"
+    required: false
+    default: "HEAD"
+  module_dir:
+    description: "Module subdirectory inside repo (for mode=snapshot)"
+    required: false
+    default: "."
+  dependency:
+    description: "Pinned Mooncakes dependency name (for mode=snapshot)"
+    required: false
+    default: ""
+  baseline_version:
+    description: "Baseline dependency version (for mode=snapshot)"
+    required: false
+    default: ""
+  candidate_version:
+    description: "Candidate dependency version (for mode=snapshot)"
+    required: false
+    default: ""
+  target:
+    description: "MoonBit test target: wasm, wasm-gc, js, or native"
+    required: false
+    default: "wasm"
+  out_dir:
+    description: "Output directory for reports and logs"
+    required: false
+    default: "downstream-regression-evidence"
+runs:
+  using: "composite"
+  steps:
+    - name: Run downstream-regression
+      shell: bash
+      run: |
+        set -euo pipefail
+        ACTION_DIR="${{ github.action_path }}"
+        OUT_DIR="${{ inputs.out_dir }}"
+        mkdir -p "$OUT_DIR"
+        if [ "${{ inputs.mode }}" = "mbti-diff" ]; then
+          ARGS=(mbti-diff "${{ inputs.old_mbti }}" "${{ inputs.new_mbti }}" --format markdown --out "$OUT_DIR/mbti-diff.md")
+          if [ "${{ inputs.fail_on_breaking }}" = "true" ]; then
+            ARGS+=(--fail-on-breaking)
+          fi
+          set +e
+          moon -C "$ACTION_DIR" run --target wasm cmd/main -- "${ARGS[@]}"
+          CODE=$?
+          set -e
+          if [ -f "$OUT_DIR/mbti-diff.md" ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            cat "$OUT_DIR/mbti-diff.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$CODE"
+        elif [ "${{ inputs.mode }}" = "snapshot" ]; then
+          MOON_BIN="$(command -v moon)"
+          GIT_BIN="$(command -v git)"
+          set +e
+          moon -C "$ACTION_DIR" run --target wasm cmd/main -- --out "$OUT_DIR" snapshot \
+            "$MOON_BIN" "$GIT_BIN" "${{ inputs.repo }}" "${{ inputs.rev }}" "${{ inputs.module_dir }}" \
+            "${{ inputs.dependency }}" "${{ inputs.baseline_version }}" "${{ inputs.candidate_version }}" "${{ inputs.target }}"
+          CODE=$?
+          set -e
+          if [ -f "$OUT_DIR/report.md" ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            cat "$OUT_DIR/report.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$CODE"
+        else
+          echo "Unsupported mode: ${{ inputs.mode }} (expected mbti-diff or snapshot)" >&2
+          exit 2
+        fi

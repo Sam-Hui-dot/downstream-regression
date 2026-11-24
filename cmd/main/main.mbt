@@ -64,6 +64,74 @@ async fn execute(
 }
 
 ///|
+async fn collect_mbti_dir(
+  root : String,
+  rel : String,
+  out : Map[String, String],
+) -> Unit {
+  let current = if rel.is_empty() { root } else { "\{root}/\{rel}" }
+  if !@fs.exists(current) {
+    return
+  }
+  let entries = @fs.readdir(current, sort=true) catch { _ => return }
+  for name in entries {
+    if name == "examples" ||
+      name == "internal" ||
+      name == "_build" ||
+      name == ".git" ||
+      name == "target" {
+      continue
+    }
+    let child_rel = if rel.is_empty() { name } else { "\{rel}/\{name}" }
+    let full = "\{root}/\{child_rel}"
+    let kind = @fs.kind(full, follow_symlink=false) catch { _ => continue }
+    match kind {
+      Directory => collect_mbti_dir(root, child_rel, out)
+      Regular =>
+        if name.has_suffix(".mbti") {
+          let content = @fs.read_file(full).text() catch { _ => continue }
+          out[child_rel] = content
+        }
+      _ => ()
+    }
+  }
+}
+
+///|
+async fn collect_upstream_api_diffs(
+  baseline_dir : String,
+  candidate_dir : String,
+  dependency : String,
+) -> Array[@downstream-regression.MbtiDiffReport] {
+  let base_root = "\{baseline_dir}/.mooncakes/\{dependency}"
+  let cand_root = "\{candidate_dir}/.mooncakes/\{dependency}"
+  let base_files : Map[String, String] = Map([])
+  let cand_files : Map[String, String] = Map([])
+  collect_mbti_dir(base_root, "", base_files)
+  collect_mbti_dir(cand_root, "", cand_files)
+  let keys : Array[String] = []
+  for k, _ in base_files {
+    keys.push(k)
+  }
+  for k, _ in cand_files {
+    if !base_files.contains(k) {
+      keys.push(k)
+    }
+  }
+  keys.sort()
+  let diffs : Array[@downstream-regression.MbtiDiffReport] = []
+  for k in keys {
+    let old_text = base_files.get(k).unwrap_or("")
+    let new_text = cand_files.get(k).unwrap_or("")
+    let diff = @downstream-regression.diff_mbti(old_text, new_text)
+    if !diff.changes.is_empty() {
+      diffs.push(diff)
+    }
+  }
+  diffs
+}
+
+///|
 async fn run_comparison(
   moon : String,
   dependency : String,
@@ -95,6 +163,29 @@ async fn run_comparison(
     let report = @downstream-regression.compare_trials(
       left, right, dependency, target, evidence,
     )
+    let api_diffs = collect_upstream_api_diffs(
+      baseline.dir,
+      candidate.dir,
+      dependency,
+    )
+    let candidate_log = @fs.read_file("\{evidence}/candidate-test.txt").text() catch {
+      _ => ""
+    }
+    let root_causes = @downstream-regression.correlate_regression_with_mbti(
+      report, api_diffs, candidate_log,
+    )
+    if !api_diffs.is_empty() || !root_causes.is_empty() {
+      let api_json = @json.Json::object({
+        "dependency": @json.ToJson::to_json(dependency),
+        "api_diffs": @json.ToJson::to_json(api_diffs),
+        "root_causes": @json.ToJson::to_json(root_causes),
+      }).stringify()
+      @fs.write_file(
+        "\{evidence}/api-diff.json",
+        api_json,
+        create_mode=CreateOrTruncate,
+      )
+    }
     let json = @json.ToJson::to_json(report).stringify()
     @fs.write_file(
       "\{evidence}/report.json",
@@ -103,12 +194,22 @@ async fn run_comparison(
     )
     @fs.write_file(
       "\{evidence}/report.md",
-      @downstream-regression.render_markdown_report(report, toolchain~),
+      @downstream-regression.render_markdown_report(
+        report,
+        toolchain~,
+        api_diffs~,
+        root_causes~,
+      ),
       create_mode=CreateOrTruncate,
     )
     @fs.write_file(
       "\{evidence}/report.html",
-      @downstream-regression.render_html_report(report, toolchain~),
+      @downstream-regression.render_html_report(
+        report,
+        toolchain~,
+        api_diffs~,
+        root_causes~,
+      ),
       create_mode=CreateOrTruncate,
     )
     if print_report {
