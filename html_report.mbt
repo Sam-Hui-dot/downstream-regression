@@ -23,6 +23,8 @@ fn status_badge_class(status : String) -> String {
 pub fn render_html_report(
   report : Comparison,
   toolchain~ : String = "",
+  api_diffs~ : Array[MbtiDiffReport] = [],
+  root_causes~ : Array[RootCauseHint] = [],
 ) -> String {
   let code = exit_code_for_status(report.status)
   let badge = status_badge_class(report.status)
@@ -97,6 +99,44 @@ pub fn render_html_report(
     for ch in report.other_dependency_changes {
       out.write_string(
         "<tr><td><code>\{html_escape(ch.requested)}</code></td><td><code>\{html_escape(ch.baseline.join(", "))}</code></td><td><code>\{html_escape(ch.candidate.join(", "))}</code></td></tr>\n",
+      )
+    }
+    out.write_string("</tbody></table></div>\n")
+  }
+
+  if !root_causes.is_empty() {
+    out.write_string(
+      "<div class=\"card\"><h2 style=\"margin-top:0;font-size:16px\">Suspected Root-Cause Correlation (\{root_causes.length()})</h2><table><thead><tr><th>Upstream Package</th><th>Breaking Symbol</th><th>Change</th><th>Evidence</th><th>Matched Diagnostic</th></tr></thead><tbody>\n",
+    )
+    for hint in root_causes {
+      out.write_string(
+        "<tr><td><code>\{html_escape(hint.package_name)}</code></td><td><code>\{html_escape(hint.symbol)}</code></td><td>\{html_escape(hint.change_detail)}</td><td><span class=\"badge badge-fail\">\{html_escape(hint.evidence_kind)}</span></td><td><code>\{html_escape(hint.evidence_excerpt)}</code></td></tr>\n",
+      )
+    }
+    out.write_string("</tbody></table></div>\n")
+  }
+
+  let breaking_diffs : Array[(String, MbtiChange)] = []
+  for diff in api_diffs {
+    for ch in diff.changes {
+      if ch.severity == "breaking" {
+        breaking_diffs.push((diff.package_name, ch))
+      }
+    }
+  }
+  if !breaking_diffs.is_empty() {
+    out.write_string(
+      "<div class=\"card\"><h2 style=\"margin-top:0;font-size:16px\">Upstream API Breaking Changes (\{breaking_diffs.length()})</h2><table><thead><tr><th>Package</th><th>Category</th><th>Symbol</th><th>Detail</th></tr></thead><tbody>\n",
+    )
+    let limit = if breaking_diffs.length() < 40 {
+      breaking_diffs.length()
+    } else {
+      40
+    }
+    for i in 0..<limit {
+      let (pkg, ch) = breaking_diffs[i]
+      out.write_string(
+        "<tr><td><code>\{html_escape(pkg)}</code></td><td><code>\{html_escape(ch.category)}</code></td><td><code>\{html_escape(ch.symbol)}</code></td><td>\{html_escape(ch.detail)}</td></tr>\n",
       )
     }
     out.write_string("</tbody></table></div>\n")

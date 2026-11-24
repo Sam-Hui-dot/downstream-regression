@@ -50,6 +50,8 @@ fn write_failure_section(
 pub fn render_markdown_report(
   report : Comparison,
   toolchain~ : String = "",
+  api_diffs~ : Array[MbtiDiffReport] = [],
+  root_causes~ : Array[RootCauseHint] = [],
 ) -> String {
   let out = StringBuilder()
   let code = exit_code_for_status(report.status)
@@ -113,6 +115,53 @@ pub fn render_markdown_report(
       let after = change.candidate.join(", ")
       out.write_string(
         "| `\{escape_md_cell(change.requested)}` | `\{escape_md_cell(before)}` | `\{escape_md_cell(after)}` |\n",
+      )
+    }
+  }
+
+  if !root_causes.is_empty() {
+    out.write_string(
+      "\n## Suspected Root-Cause Correlation (\{root_causes.length()})\n\n",
+    )
+    out.write_string(
+      "| Upstream Package | Breaking Symbol | Change | Evidence Kind | Matched Diagnostic |\n",
+    )
+    out.write_string("| --- | --- | --- | --- | --- |\n")
+    for hint in root_causes {
+      out.write_string(
+        "| `\{escape_md_cell(hint.package_name)}` | `\{escape_md_cell(hint.symbol)}` | \{escape_md_cell(hint.change_detail)} | `\{escape_md_cell(hint.evidence_kind)}` | \{escape_md_cell(hint.evidence_excerpt)} |\n",
+      )
+    }
+  }
+
+  let breaking_diffs : Array[(String, MbtiChange)] = []
+  for diff in api_diffs {
+    for ch in diff.changes {
+      if ch.severity == "breaking" {
+        breaking_diffs.push((diff.package_name, ch))
+      }
+    }
+  }
+  if !breaking_diffs.is_empty() {
+    out.write_string(
+      "\n## Upstream API Breaking Changes (\{breaking_diffs.length()})\n\n",
+    )
+    out.write_string("| Package | Category | Symbol | Detail |\n")
+    out.write_string("| --- | --- | --- | --- |\n")
+    let limit = if breaking_diffs.length() < 30 {
+      breaking_diffs.length()
+    } else {
+      30
+    }
+    for i in 0..<limit {
+      let (pkg, ch) = breaking_diffs[i]
+      out.write_string(
+        "| `\{escape_md_cell(pkg)}` | `\{escape_md_cell(ch.category)}` | `\{escape_md_cell(ch.symbol)}` | \{escape_md_cell(ch.detail)} |\n",
+      )
+    }
+    if breaking_diffs.length() > limit {
+      out.write_string(
+        "\n_...and \{breaking_diffs.length() - limit} more breaking API changes (see `api-diff.json`)._\n",
       )
     }
   }

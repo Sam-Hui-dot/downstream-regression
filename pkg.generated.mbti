@@ -9,6 +9,8 @@ import {
 // Values
 pub fn compare_trials(Trial, Trial, String, String, String) -> Comparison
 
+pub fn correlate_regression_with_mbti(Comparison, Array[MbtiDiffReport], String) -> Array[RootCauseHint]
+
 pub fn diff_mbti(String, String) -> MbtiDiffReport
 
 pub fn diff_resolutions(Map[String, Array[String]], Map[String, Array[String]], String) -> Array[ResolutionChange]
@@ -41,9 +43,9 @@ pub fn render_batch_html(BatchOutcome) -> String
 
 pub fn render_batch_markdown(BatchOutcome) -> String
 
-pub fn render_html_report(Comparison, toolchain? : String) -> String
+pub fn render_html_report(Comparison, toolchain? : String, api_diffs? : Array[MbtiDiffReport], root_causes? : Array[RootCauseHint]) -> String
 
-pub fn render_markdown_report(Comparison, toolchain? : String) -> String
+pub fn render_markdown_report(Comparison, toolchain? : String, api_diffs? : Array[MbtiDiffReport], root_causes? : Array[RootCauseHint]) -> String
 
 pub fn render_mbti_diff_markdown(MbtiDiffReport) -> String
 
@@ -202,6 +204,20 @@ pub fn ResolutionChange::equal(Self, Self) -> Bool
 pub fn ResolutionChange::not_equal(Self, Self) -> Bool
 pub fn ResolutionChange::to_json(Self) -> @json.Json
 pub fn ResolutionChange::to_repr(Self) -> @debug.Repr
+
+#derive(Eq, @debug.Debug, @json.ToJson)
+pub(all) struct RootCauseHint {
+  package_name : String
+  symbol : String
+  category : String
+  change_detail : String
+  evidence_kind : String
+  evidence_excerpt : String
+}
+pub fn RootCauseHint::equal(Self, Self) -> Bool
+pub fn RootCauseHint::not_equal(Self, Self) -> Bool
+pub fn RootCauseHint::to_json(Self) -> @json.Json
+pub fn RootCauseHint::to_repr(Self) -> @debug.Repr
 
 #derive(Eq, @debug.Debug, @json.ToJson)
 pub(all) struct TestCounts {

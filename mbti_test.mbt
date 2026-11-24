@@ -177,3 +177,110 @@ test "parse_mbti separates Type::method from top-level values" {
   assert_eq(report.changes[0].category, "method")
   assert_eq(report.changes[0].symbol, "Box::set")
 }
+
+///|
+test "parse_mbti handles multiline signatures, pub(readonly), pub const, and granular signature diffs" {
+  let old_mbti =
+    #|package "demo/advanced"
+    #|pub const MAX_RETRIES : Int = 3
+    #|pub fn[T : Eq] fetch(
+    #|  String,
+    #|  timeout~ : Int,
+    #|) -> T
+    #|pub(readonly) struct View {
+    #|  len : Int
+    #|}
+    #|pub extend View with Eq::{equal}
+    #|
+  let new_mbti =
+    #|package "demo/advanced"
+    #|pub const MAX_RETRIES : Int = 5
+    #|pub fn[T : Eq + Hash] fetch(String, timeout? : Int) -> T raise Error
+    #|pub struct View {
+    #|  len : Int
+    #|}
+    #|
+  let report = @downstream-regression.diff_mbti(old_mbti, new_mbti)
+  assert_false(report.compatible)
+  // Expect breaking changes: MAX_RETRIES const changed, fetch signature changed, View visibility narrowed, extend removed
+  assert_eq(report.breaking_count, 4)
+  let mut saw_fetch_detail = ""
+  for ch in report.changes {
+    if ch.symbol == "fetch" {
+      saw_fetch_detail = ch.detail
+    }
+  }
+  assert_true(
+    saw_fetch_detail.contains("generic parameters or trait bounds changed"),
+  )
+  assert_true(
+    saw_fetch_detail.contains("labeled or optional parameters changed"),
+  )
+  assert_true(saw_fetch_detail.contains("raise/error signature changed"))
+}
+
+///|
+test "correlate_regression_with_mbti links compiler errors and test failures to upstream breaking symbols" {
+  let old_api =
+    #|package "moonbitlang/async"
+    #|pub async fn handle_cancellation(() -> Unit) -> Unit
+    #|pub fn idle_timeout(Int) -> Unit
+    #|
+  let new_api =
+    #|package "moonbitlang/async"
+    #|pub fn idle_timeout(Int64) -> Unit
+    #|
+  let api_diff = @downstream-regression.diff_mbti(old_api, new_api)
+  let base : @downstream-regression.Trial = {
+    directory: "/b",
+    downstream: "examples/compile-regression@0.1.0",
+    dependency: "moonbitlang/async@0.22.0",
+    exit_code: 0,
+    counts: Some({ total: 1, passed: 1, failed: 0, skipped: 0, }),
+    failures: Map([]),
+    compiler_errors: [],
+    resolutions: Map([]),
+  }
+  let cand : @downstream-regression.Trial = {
+    directory: "/c",
+    downstream: "examples/compile-regression@0.1.0",
+    dependency: "moonbitlang/async@0.21.0",
+    exit_code: 1,
+    counts: None,
+    failures: Map([]),
+    compiler_errors: ["Error: [4021]"],
+    resolutions: Map([]),
+  }
+  let cmp = @downstream-regression.compare_trials(
+    base, cand, "moonbitlang/async", "wasm", "/ev",
+  )
+  let log =
+    #|Error: [4021]
+    #|  The value @async.handle_cancellation is unbound.
+    #|
+  let hints = @downstream-regression.correlate_regression_with_mbti(
+    cmp,
+    [api_diff],
+    log,
+  )
+  assert_eq(hints.length(), 1)
+  assert_eq(hints[0].symbol, "handle_cancellation")
+  assert_eq(hints[0].evidence_kind, "compiler_error")
+
+  let md = @downstream-regression.render_markdown_report(
+    cmp,
+    api_diffs=[api_diff],
+    root_causes=hints,
+  )
+  assert_true(md.contains("## Suspected Root-Cause Correlation (1)"))
+  assert_true(md.contains("`handle_cancellation`"))
+  assert_true(md.contains("## Upstream API Breaking Changes (2)"))
+
+  let html = @downstream-regression.render_html_report(
+    cmp,
+    api_diffs=[api_diff],
+    root_causes=hints,
+  )
+  assert_true(html.contains("Suspected Root-Cause Correlation (1)"))
+  assert_true(html.contains("Upstream API Breaking Changes (2)"))
+}

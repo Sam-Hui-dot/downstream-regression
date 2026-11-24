@@ -94,6 +94,40 @@ fn mbti_lex_cmp(a : String, b : String) -> Int32 {
 }
 
 ///|
+fn normalize_sig_whitespace(text : String) -> String {
+  let out = StringBuilder()
+  let mut prev_space = false
+  for ch in text.trim() {
+    if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
+      if !prev_space {
+        out.write_char(' ')
+        prev_space = true
+      }
+    } else {
+      out.write_char(ch)
+      prev_space = false
+    }
+  }
+  out.to_string()
+}
+
+///|
+fn has_unclosed_delimiters(text : String) -> Bool {
+  let mut parens = 0
+  let mut brackets = 0
+  for ch in text {
+    match ch {
+      '(' => parens += 1
+      ')' => if parens > 0 { parens -= 1 }
+      '[' => brackets += 1
+      ']' => if brackets > 0 { brackets -= 1 }
+      _ => ()
+    }
+  }
+  parens > 0 || brackets > 0
+}
+
+///|
 fn extract_ident_before(text : StringView, delimiters : String) -> String {
   let out = StringBuilder()
   for ch in text {
@@ -112,6 +146,8 @@ fn parse_type_header(line : String) -> (String, String, String)? {
     ("pub(all)", trimmed[9:].trim().to_owned())
   } else if trimmed.has_prefix("pub(open) ") {
     ("pub(open)", trimmed[10:].trim().to_owned())
+  } else if trimmed.has_prefix("pub(readonly) ") {
+    ("pub(readonly)", trimmed[14:].trim().to_owned())
   } else if trimmed.has_prefix("pub ") {
     ("pub", trimmed[4:].trim().to_owned())
   } else if trimmed.has_prefix("type ") {
@@ -147,16 +183,18 @@ pub fn parse_mbti(text : String) -> MbtiInterface {
   let mut i = 0
   let total = lines.length()
   while i < total {
-    let line = lines[i].trim().to_owned()
+    let raw_line = lines[i].trim().to_owned()
     i += 1
-    if line.is_empty() || line.has_prefix("//") || line.has_prefix("#") {
+    if raw_line.is_empty() ||
+      raw_line.has_prefix("//") ||
+      raw_line.has_prefix("#") {
       continue
     }
-    if line.has_prefix("package \"") && line.has_suffix("\"") {
-      package_name = line[9:line.length() - 1].to_owned()
+    if raw_line.has_prefix("package \"") && raw_line.has_suffix("\"") {
+      package_name = raw_line[9:raw_line.length() - 1].to_owned()
       continue
     }
-    if line.has_prefix("import {") {
+    if raw_line.has_prefix("import {") {
       while i < total && !lines[i].trim().has_prefix("}") {
         i += 1
       }
@@ -165,27 +203,65 @@ pub fn parse_mbti(text : String) -> MbtiInterface {
       }
       continue
     }
-    if line.has_prefix("pub impl ") {
-      if !impls.contains(line) {
-        impls.push(line)
+    if raw_line.has_prefix("pub impl ") || raw_line.has_prefix("pub extend ") {
+      let mut full = raw_line
+      while i < total && has_unclosed_delimiters(full) {
+        let next_line = lines[i].trim().to_owned()
+        i += 1
+        if !next_line.is_empty() && !next_line.has_prefix("//") {
+          full = "\{full} \{next_line}"
+        }
+      }
+      let norm = normalize_sig_whitespace(full)
+      if !impls.contains(norm) {
+        impls.push(norm)
       }
       continue
     }
-    if line.has_prefix("pub typealias ") {
-      let rest = line[14:].trim()
+    if raw_line.has_prefix("pub typealias ") {
+      let mut full = raw_line
+      while i < total && has_unclosed_delimiters(full) {
+        let next_line = lines[i].trim().to_owned()
+        i += 1
+        if !next_line.is_empty() && !next_line.has_prefix("//") {
+          full = "\{full} \{next_line}"
+        }
+      }
+      let norm = normalize_sig_whitespace(full)
+      let rest = norm[14:].trim()
       let name = extract_ident_before(rest, " =[")
       if !name.is_empty() {
-        type_aliases[name] = line
+        type_aliases[name] = norm
       }
       continue
     }
-    if line.has_prefix("pub fn ") ||
-      line.has_prefix("pub async fn ") ||
-      line.has_prefix("pub let ") {
+    if raw_line.has_prefix("pub fn ") ||
+      raw_line.has_prefix("pub fn[") ||
+      raw_line.has_prefix("pub async fn ") ||
+      raw_line.has_prefix("pub async fn[") ||
+      raw_line.has_prefix("pub let ") ||
+      raw_line.has_prefix("pub const ") {
+      let mut full = raw_line
+      while i < total && has_unclosed_delimiters(full) {
+        let next_line = lines[i].trim().to_owned()
+        i += 1
+        if !next_line.is_empty() && !next_line.has_prefix("//") {
+          full = "\{full} \{next_line}"
+        }
+      }
+      let line = normalize_sig_whitespace(full)
+      let is_value_binding = line.has_prefix("pub let ") ||
+        line.has_prefix("pub const ")
       let rest = if line.has_prefix("pub async fn ") {
         line[13:]
+      } else if line.has_prefix("pub async fn[") {
+        line[12:]
       } else if line.has_prefix("pub fn ") {
         line[7:]
+      } else if line.has_prefix("pub fn[") {
+        line[6:]
+      } else if line.has_prefix("pub const ") {
+        line[10:]
       } else {
         line[8:]
       }
@@ -198,7 +274,7 @@ pub fn parse_mbti(text : String) -> MbtiInterface {
       } else {
         rest.trim()
       }
-      let stop_chars = if line.has_prefix("pub let ") { " :=" } else { " ([" }
+      let stop_chars = if is_value_binding { " :=" } else { " ([" }
       let sym = extract_ident_before(after_generics, stop_chars)
       if !sym.is_empty() {
         if sym.contains("::") {
@@ -209,10 +285,10 @@ pub fn parse_mbti(text : String) -> MbtiInterface {
       }
       continue
     }
-    match parse_type_header(line) {
+    match parse_type_header(raw_line) {
       Some((visibility, kind, name)) => {
         let members : Array[String] = []
-        if line.contains("{") && !line.contains("}") {
+        if raw_line.contains("{") && !raw_line.contains("}") {
           while i < total {
             let field_line = lines[i].trim().to_owned()
             i += 1
@@ -224,7 +300,7 @@ pub fn parse_mbti(text : String) -> MbtiInterface {
             }
           }
         }
-        types[name] = { name, kind, visibility, header: line, members, }
+        types[name] = { name, kind, visibility, header: raw_line, members, }
       }
       None => ()
     }
@@ -248,9 +324,126 @@ fn visibility_rank(vis : String) -> Int32 {
   match vis {
     "abstract" => 0
     "pub" => 1
-    "pub(open)" => 2
-    "pub(all)" => 3
+    "pub(readonly)" => 2
+    "pub(open)" => 3
+    "pub(all)" => 4
     _ => 1
+  }
+}
+
+///|
+fn extract_balanced_segment(
+  text : String,
+  open_ch : Char,
+  close_ch : Char,
+) -> (String, String)? {
+  let chars = text.to_array()
+  let mut start = -1
+  let mut depth = 0
+  for i in 0..<chars.length() {
+    let c = chars[i]
+    if c == open_ch {
+      if start < 0 {
+        start = i
+      }
+      depth += 1
+    } else if c == close_ch && start >= 0 {
+      depth -= 1
+      if depth == 0 {
+        let seg = StringBuilder()
+        for j in (start + 1)..<i {
+          seg.write_char(chars[j])
+        }
+        let rest = StringBuilder()
+        for j in (i + 1)..<chars.length() {
+          rest.write_char(chars[j])
+        }
+        return Some(
+          (
+            seg.to_string().trim().to_owned(),
+            rest.to_string().trim().to_owned(),
+          ),
+        )
+      }
+    }
+  }
+  None
+}
+
+///|
+fn split_return_and_raise(tail : String) -> (String, String) {
+  let clean = match tail.split_once("->") {
+    Some((_, rhs)) => rhs.trim().to_owned()
+    None => tail.trim().to_owned()
+  }
+  match clean.split_once(" raise") {
+    Some((ret, err)) => (ret.trim().to_owned(), "raise\{err}".trim().to_owned())
+    None => (clean, "")
+  }
+}
+
+///|
+fn extract_fn_generics(sig : String) -> String {
+  let trimmed = if sig.has_prefix("pub async fn") {
+    sig[12:].trim().to_owned()
+  } else if sig.has_prefix("pub fn") {
+    sig[6:].trim().to_owned()
+  } else {
+    return ""
+  }
+  if trimmed.has_prefix("[") {
+    match extract_balanced_segment(trimmed, '[', ']') {
+      Some((g, _)) => g
+      None => ""
+    }
+  } else {
+    ""
+  }
+}
+
+///|
+fn classify_signature_change(old_sig : String, new_sig : String) -> String {
+  let reasons : Array[String] = []
+  let old_async = old_sig.has_prefix("pub async fn")
+  let new_async = new_sig.has_prefix("pub async fn")
+  if old_async != new_async {
+    reasons.push("async modifier changed")
+  }
+  let old_gen = extract_fn_generics(old_sig)
+  let new_gen = extract_fn_generics(new_sig)
+  if old_gen != new_gen {
+    reasons.push("generic parameters or trait bounds changed")
+  }
+  match
+    (
+      extract_balanced_segment(old_sig, '(', ')'),
+      extract_balanced_segment(new_sig, '(', ')'),
+    ) {
+    (Some((old_params, old_tail)), Some((new_params, new_tail))) => {
+      if old_params != new_params {
+        let old_labeled = old_params.contains("~") || old_params.contains("?")
+        let new_labeled = new_params.contains("~") || new_params.contains("?")
+        if old_labeled || new_labeled {
+          reasons.push("labeled or optional parameters changed")
+        } else {
+          reasons.push("parameter list changed")
+        }
+      }
+      let (old_ret, old_err) = split_return_and_raise(old_tail)
+      let (new_ret, new_err) = split_return_and_raise(new_tail)
+      if old_ret != new_ret {
+        reasons.push("return type changed")
+      }
+      if old_err != new_err {
+        reasons.push("raise/error signature changed")
+      }
+    }
+    _ => ()
+  }
+  if reasons.is_empty() {
+    "signature changed"
+  } else {
+    reasons.join("; ")
   }
 }
 
@@ -275,11 +468,16 @@ fn diff_signature_maps(
         })
       Some(new_sig) =>
         if old_sig != new_sig {
+          let detail = if category == "value" || category == "method" {
+            classify_signature_change(old_sig, new_sig)
+          } else {
+            "signature changed"
+          }
           changes.push({
             severity: "breaking",
             category,
             symbol: sym,
-            detail: "signature changed",
+            detail,
             baseline: Some(old_sig),
             candidate: Some(new_sig),
           })
