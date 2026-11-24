@@ -8,16 +8,16 @@
 
 ```powershell
 moon update
-moon install Sam-Hui-dot/downstream-regression/cmd/main@0.3.0
+moon install Sam-Hui-dot/downstream-regression/cmd/main@0.4.0
 main --help
 ```
 
 ### 2. 作为 MoonBit 库使用（支持 Wasm / WasmGC / JS / Native）
 
-根包 `Sam-Hui-dot/downstream-regression` 不依赖进程 IO，可在任意目标上导入使用（用于日志解析、`moon tree` 依赖漂移核对、`moon.mod` / `moon.mod.json` 依赖改写、`.mbti` 公共 API 破坏性变更静态分析、回归分类以及 Markdown / HTML 报告渲染）：
+根包 `Sam-Hui-dot/downstream-regression` 不依赖进程 IO，可在任意目标上导入使用（用于日志解析、`moon tree` 依赖漂移核对、`moon.mod` / `moon.mod.json` 依赖改写、`.mbti` 公共 API 破坏性变更静态分析、上游 API 变更与下游失败根因联动，以及 Markdown / HTML 报告渲染）：
 
 ```powershell
-moon add Sam-Hui-dot/downstream-regression@0.3.0
+moon add Sam-Hui-dot/downstream-regression@0.4.0
 ```
 
 ```moonbit
@@ -65,9 +65,9 @@ moon run cmd/main --target wasm -- moon moonbitlang/async D:/cases/moonback-old/
 
 参数末尾指定下游测试目标，默认 `wasm`，可选 `wasm`、`native`、`wasm-gc`、`js`。CLI 自身支持 `wasm` 与 `native` 构建。由于正常的 Moon 构建和测试会执行下游项目代码，应在可信源码上运行。
 
-## `.mbti` 公共 API 破坏性变更分析
+## `.mbti` 公共 API 破坏性变更分析与根因联动
 
-`mbti-diff` 子命令直接解析两份 MoonBit 接口快照文件（`pkg.generated.mbti`），在运行下游测试之前即可静态识别删除/签名前后不一致的公开函数与方法、类型定义/可见性收窄、结构体字段/枚举构造器变更、trait 实现移除与新增公开符号：
+`mbti-diff` 子命令直接解析两份 MoonBit 接口快照文件（`pkg.generated.mbti`），在运行下游测试之前即可静态识别删除/签名前后不一致的公开函数与方法（细分返回类型、参数列表、标签/可选参数、`raise` 异常签名、泛型约束与 `async` 修饰符变更）、跨行签名、类型定义/可见性收窄（`pub(all)` / `pub(open)` / `pub(readonly)` / `pub` / 抽象类型）、结构体字段/枚举构造器变更、`pub const`、trait 实现（`pub impl` / `pub extend`）移除与新增公开符号：
 
 ```powershell
 moon run cmd/main --target wasm -- mbti-diff old.mbti new.mbti --format markdown --fail-on-breaking
@@ -76,6 +76,20 @@ moon run cmd/main --target wasm -- mbti-diff old.mbti new.mbti --format json --o
 
 - `--format text|markdown|json`：默认 `text`。
 - `--fail-on-breaking`：检测到破坏性变更（`breaking_count > 0`）时以退出码 `1` 退出，适合直接接入 CI 门禁。
+- **自动根因联动**：在执行 `snapshot` 或目录对照时，CLI 会自动扫描基线与候选依赖包在 `.mooncakes/<dependency>` 下的公开 `.mbti` 文件，自动输出 `api-diff.json`，并将破坏性符号与下游编译错误（如 `Error: [4021]`）及新增失败测试进行交叉匹配，直接在 `report.md` 与 `report.html` 中生成「Suspected Root-Cause Correlation」根因关联表。
+
+### GitHub Actions 复现与接入（`action.yml`）
+
+仓库根目录提供可直接引用的 composite GitHub Action（`Sam-Hui-dot/downstream-regression@main`），支持 `mbti-diff` 静态门禁与 `snapshot` 回归检查，并自动将报告写入 `$GITHUB_STEP_SUMMARY`：
+
+```yaml
+- uses: Sam-Hui-dot/downstream-regression@main
+  with:
+    mode: mbti-diff
+    old_mbti: baseline.mbti
+    new_mbti: pkg.generated.mbti
+    fail_on_breaking: 'true'
+```
 
 ## 批量核对
 

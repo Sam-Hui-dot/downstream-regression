@@ -69,7 +69,7 @@ jobs:
           $lib = Join-Path $ws 'library'
           $consumer = Join-Path $ws 'consumer'
           New-Item -ItemType Directory -Force -Path $lib, $consumer | Out-Null
-          foreach ($f in 'moon.mod', 'moon.pkg', 'types.mbt', 'parser.mbt', 'manifest.mbt', 'compare.mbt', 'report.mbt', 'mbti.mbt', 'html_report.mbt') {
+          foreach ($f in 'moon.mod', 'moon.pkg', 'types.mbt', 'parser.mbt', 'manifest.mbt', 'compare.mbt', 'report.mbt', 'mbti.mbt', 'correlate.mbt', 'html_report.mbt') {
             Copy-Item -LiteralPath $f -Destination (Join-Path $lib $f)
           }
           Set-Content -LiteralPath (Join-Path $ws 'moon.work') -Value 'members = ["library", "consumer"]'
@@ -78,7 +78,7 @@ jobs:
           version = "0.1.0"
 
           import {
-            "Sam-Hui-dot/downstream-regression@0.3.0",
+            "Sam-Hui-dot/downstream-regression@0.4.0",
           }
           "@
           Set-Content -LiteralPath (Join-Path $consumer 'moon.pkg') -Value @"
@@ -157,6 +157,14 @@ jobs:
           $reportHtml = Join-Path $compileOut 'report.html'
           if (-not (Test-Path -LiteralPath $reportHtml -PathType Leaf)) {
             throw "Expected HTML report was not written: $reportHtml"
+          }
+          $apiDiffJson = Join-Path $compileOut 'api-diff.json'
+          if (-not (Test-Path -LiteralPath $apiDiffJson -PathType Leaf)) {
+            throw "Expected upstream API diff report was not written: $apiDiffJson"
+          }
+          $reportMdText = Get-Content -Raw -LiteralPath $reportMd
+          if ($reportMdText -notmatch 'Suspected Root-Cause Correlation' -or $reportMdText -notmatch 'handle_cancellation') {
+            throw "Expected root-cause correlation for handle_cancellation in $reportMd"
           }
           & $moon run --target wasm cmd/main -- mbti-diff pkg.generated.mbti pkg.generated.mbti --fail-on-breaking
           if ($LASTEXITCODE) { throw "mbti-diff self-comparison failed with exit $LASTEXITCODE" }
