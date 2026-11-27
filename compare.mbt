@@ -161,7 +161,7 @@ pub fn parse_batch_plan(raw : Json) -> Array[BatchCase] raise StudyError {
     guard !seen.contains(id) else {
       raise InvalidInput("duplicate case id: \{id}")
     }
-    seen.add(id)
+    seen.insert(id)
     let repo = required_plan_field(fields, "repo", position)
     let revision = required_plan_field(fields, "revision", position)
     let module_dir = required_plan_field(fields, "module", position)

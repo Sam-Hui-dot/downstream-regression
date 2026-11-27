@@ -6,6 +6,80 @@ permissions:
   contents: read
 
 jobs:
+  moonbit-1-0:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MOON_WORK: 'off'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Install latest MoonBit toolchain (>= 1.0.0-rc1)
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+      - name: Verify formatting, multi-target checks, unit tests, and build
+        run: |
+          moon version --all
+          moon update
+          moon fmt --check
+          for target in wasm wasm-gc js native; do
+            echo "Checking and testing target: $target"
+            moon check --target "$target" --deny-warn
+            moon test --target "$target" --deny-warn
+          done
+          moon build --target wasm
+          moon run --target wasm cmd/main -- mbti-diff pkg.generated.mbti pkg.generated.mbti --fail-on-breaking
+      - name: Verify root library from an independent consumer module
+        run: |
+          WS="$RUNNER_TEMP/independent-consumer-ws"
+          mkdir -p "$WS/library" "$WS/consumer"
+          cp moon.mod moon.pkg types.mbt parser.mbt manifest.mbt compare.mbt report.mbt mbti.mbt correlate.mbt html_report.mbt "$WS/library/"
+          printf 'members = ["library", "consumer"]\n' > "$WS/moon.work"
+          cat > "$WS/consumer/moon.mod" << 'EOF'
+          name = "consumer/check"
+          version = "0.1.0"
+
+          import {
+            "Sam-Hui-dot/downstream-regression@0.4.1",
+          }
+          EOF
+          cat > "$WS/consumer/moon.pkg" << 'EOF'
+          import {
+            "Sam-Hui-dot/downstream-regression" @dr,
+          }
+          pkgtype(kind: "executable")
+          EOF
+          cat > "$WS/consumer/main.mbt" << 'EOF'
+          fn main raise {
+            let counts = @dr.parse_test_counts("Total tests: 4, passed: 4, failed: 0.")
+            guard counts == Some({ total: 4, passed: 4, failed: 0, skipped: 0 }) else {
+              abort("unexpected counts")
+            }
+            let rewritten = @dr.rewrite_manifest_dependency(
+              MoonModJson,
+              "{\"name\":\"app\",\"deps\":{\"a/b\":\"0.1.0\"}}",
+              "a/b",
+              "0.1.0",
+              "0.2.0",
+            )
+            guard rewritten.contains("\"a/b\":\"0.2.0\"") else {
+              abort("unexpected rewrite")
+            }
+            let mbti = @dr.diff_mbti(
+              "package \"a/b\"\npub fn f(Int) -> Int\n",
+              "package \"a/b\"\npub fn f(Int) -> String\n",
+            )
+            guard mbti.breaking_count == 1 else {
+              abort("unexpected mbti diff")
+            }
+            println("consumer: ok")
+          }
+          EOF
+          MOON_WORK="" moon -C "$WS/consumer" run --target js --deny-warn .
+          MOON_WORK="" moon -C "$WS/consumer" run --target wasm --deny-warn .
+
   historical-comparison:
     runs-on: windows-latest
     timeout-minutes: 25
@@ -78,7 +152,7 @@ jobs:
           version = "0.1.0"
 
           import {
-            "Sam-Hui-dot/downstream-regression@0.4.0",
+            "Sam-Hui-dot/downstream-regression@0.4.1",
           }
           "@
           Set-Content -LiteralPath (Join-Path $consumer 'moon.pkg') -Value @"
