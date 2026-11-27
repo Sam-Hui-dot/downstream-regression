@@ -151,7 +151,7 @@ pub fn parse_batch_plan(raw : Json) -> Array[BatchCase] raise StudyError {
     raise InvalidInput("plan must be a nonempty JSON array")
   }
   let cases : Array[BatchCase] = []
-  let seen : Map[String, Bool] = {}
+  let seen : Map[String, Bool] = Map([])
   for index, entry in entries {
     let position = index + 1
     guard entry is Object(fields) else {
